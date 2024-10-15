@@ -155,55 +155,44 @@ app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
   });
 });
 
-app.put("/post", uploadMiddleware.single("file"), async (req, res) => {
-  let newPath = null;
-  if (req.file) {
-    const { originalname, path } = req.file;
+app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
+  try {
+    // Check if file is uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
 
-    // Ensure the uploaded file exists
+    const { originalname, path } = req.file;
     const parts = originalname.split(".");
     const ext = parts[parts.length - 1];
-    newPath = path + "." + ext;
-
-    // Rename the uploaded file to include its original extension
+    const newPath = path + "." + ext;
     fs.renameSync(path, newPath);
+
+    const { token } = req.cookies;
+
+    // Verify the token
+    jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
+      if (err) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { title, summary, content } = req.body;
+      const postDoc = await Post.create({
+        title,
+        summary,
+        content,
+        cover: newPath,
+        author: info.id,
+      });
+
+      // Set the token in a cookie after creating the post
+      res.cookie("token", token, { httpOnly: true }); // Set cookie options as needed
+      res.status(201).json(postDoc);
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
-
-  const { token } = req.cookies;
-  if (!token) {
-    return res.status(401).json({ message: "No token provided" });
-  }
-
-  jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
-    if (err) {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-
-    const { id, title, summary, content } = req.body;
-    const postDoc = await Post.findById(id);
-    if (!postDoc) {
-      return res.status(404).json({ message: "Post not found" });
-    }
-
-    const isAuthor = JSON.stringify(postDoc.author) === JSON.stringify(info.id);
-    if (!isAuthor) {
-      return res.status(403).json({ message: "You are not the author" });
-    }
-
-    // Update the post document
-    postDoc.title = title;
-    postDoc.summary = summary;
-    postDoc.content = content;
-    postDoc.cover = newPath ? newPath : postDoc.cover;
-
-    try {
-      await postDoc.save(); // Save the updated document
-      res.json(postDoc);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: "Failed to update post" });
-    }
-  });
 });
 
 app.get("/post", async (req, res) => {
