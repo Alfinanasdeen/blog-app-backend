@@ -70,18 +70,26 @@ app.post("/register", async (req, res) => {
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const userDoc = await User.findOne({ username });
+
+  if (!userDoc) {
+    return res.status(400).json({ message: "User not found" });
+  }
+
   const passOk = bcrypt.compareSync(password, userDoc.password);
   if (passOk) {
     // logged in
     jwt.sign({ username, id: userDoc._id }, JWT_SECRET, {}, (err, token) => {
-      if (err) throw err;
+      if (err) {
+        console.error("JWT Sign Error:", err);
+        return res.status(500).json({ message: "Token generation failed" });
+      }
       res.cookie("token", token).json({
         id: userDoc._id,
         username,
       });
     });
   } else {
-    res.status(400).json("wrong credentials");
+    res.status(400).json("Wrong credentials");
   }
 });
 
@@ -138,18 +146,25 @@ app.put("/post", uploadMiddleware.single("file"), async (req, res) => {
   const { token } = req.cookies;
   jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
     if (err) throw err;
+
     const { id, title, summary, content } = req.body;
     const postDoc = await Post.findById(id);
+    if (!postDoc) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
     const isAuthor = JSON.stringify(postDoc.author) === JSON.stringify(info.id);
     if (!isAuthor) {
-      return res.status(400).json("you are not the author");
+      return res.status(403).json("You are not the author");
     }
-    await postDoc.update({
-      title,
-      summary,
-      content,
-      cover: newPath ? newPath : postDoc.cover,
-    });
+
+    // Update the post document
+    postDoc.title = title;
+    postDoc.summary = summary;
+    postDoc.content = content;
+    postDoc.cover = newPath ? newPath : postDoc.cover;
+
+    await postDoc.save(); // Save the updated document
 
     res.json(postDoc);
   });
