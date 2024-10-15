@@ -83,7 +83,16 @@ app.post("/login", async (req, res) => {
         console.error("JWT Sign Error:", err);
         return res.status(500).json({ message: "Token generation failed" });
       }
-      res.cookie("token", token).json({
+      // Set cookie with appropriate attributes
+      res.cookie("token", token, {
+        httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
+        secure: process.env.NODE_ENV === "production", // Set to true if using HTTPS
+        sameSite: "None", // Required for cross-origin cookies
+        path: "/", // Cookie is accessible on all routes
+      });
+
+      // Send response
+      return res.json({
         id: userDoc._id,
         username,
       });
