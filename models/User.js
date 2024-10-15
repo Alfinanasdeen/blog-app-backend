@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const { Schema, model } = mongoose;
 
@@ -7,6 +7,6 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
 });
 
-const UserModel = model('User', UserSchema);
+const UserModel = model("User", UserSchema);
 
 export default UserModel;

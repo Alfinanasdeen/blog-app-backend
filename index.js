@@ -110,26 +110,48 @@ app.get("/profile", (req, res) => {
 app.post("/logout", (req, res) => {
   res.cookie("token", "").json("ok");
 });
-
 app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
   const { originalname, path } = req.file;
+
+  // Ensure the uploaded file exists
+  if (!req.file) {
+    return res.status(400).json({ message: "File is required" });
+  }
+
   const parts = originalname.split(".");
   const ext = parts[parts.length - 1];
   const newPath = path + "." + ext;
+
+  // Rename the uploaded file to include its original extension
   fs.renameSync(path, newPath);
 
+  // Verify the JWT token from cookies
   const { token } = req.cookies;
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
   jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
-    if (err) throw err;
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+
+    // Destructure title, summary, and content from the request body
     const { title, summary, content } = req.body;
-    const postDoc = await Post.create({
-      title,
-      summary,
-      content,
-      cover: newPath,
-      author: info.id,
-    });
-    res.json(postDoc);
+
+    try {
+      const postDoc = await Post.create({
+        title,
+        summary,
+        content,
+        cover: newPath,
+        author: info.id,
+      });
+      res.json(postDoc);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to create post" });
+    }
   });
 });
 
@@ -137,15 +159,25 @@ app.put("/post", uploadMiddleware.single("file"), async (req, res) => {
   let newPath = null;
   if (req.file) {
     const { originalname, path } = req.file;
+
+    // Ensure the uploaded file exists
     const parts = originalname.split(".");
     const ext = parts[parts.length - 1];
     newPath = path + "." + ext;
+
+    // Rename the uploaded file to include its original extension
     fs.renameSync(path, newPath);
   }
 
   const { token } = req.cookies;
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
   jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
-    if (err) throw err;
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
 
     const { id, title, summary, content } = req.body;
     const postDoc = await Post.findById(id);
@@ -155,7 +187,7 @@ app.put("/post", uploadMiddleware.single("file"), async (req, res) => {
 
     const isAuthor = JSON.stringify(postDoc.author) === JSON.stringify(info.id);
     if (!isAuthor) {
-      return res.status(403).json("You are not the author");
+      return res.status(403).json({ message: "You are not the author" });
     }
 
     // Update the post document
@@ -164,25 +196,41 @@ app.put("/post", uploadMiddleware.single("file"), async (req, res) => {
     postDoc.content = content;
     postDoc.cover = newPath ? newPath : postDoc.cover;
 
-    await postDoc.save(); // Save the updated document
-
-    res.json(postDoc);
+    try {
+      await postDoc.save(); // Save the updated document
+      res.json(postDoc);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to update post" });
+    }
   });
 });
 
 app.get("/post", async (req, res) => {
-  res.json(
-    await Post.find()
+  try {
+    const posts = await Post.find()
       .populate("author", ["username"])
       .sort({ createdAt: -1 })
-      .limit(20)
-  );
+      .limit(20);
+    res.json(posts);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch posts" });
+  }
 });
 
 app.get("/post/:id", async (req, res) => {
   const { id } = req.params;
-  const postDoc = await Post.findById(id).populate("author", ["username"]);
-  res.json(postDoc);
+  try {
+    const postDoc = await Post.findById(id).populate("author", ["username"]);
+    if (!postDoc) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+    res.json(postDoc);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch post" });
+  }
 });
 
 // Start server
