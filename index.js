@@ -32,22 +32,22 @@ const app = express();
 const uploadMiddleware = multer({ dest: "uploads/" });
 const salt = bcrypt.genSaltSync(10);
 const JWT_SECRET = process.env.JWT_SECRET;
-
-// Middleware
-app.use(
-  cors({
-    origin: "https://dapper-marzipan-3f7e6a.netlify.app/", // Allow production origins
-    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
-    allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
-    credentials: false, // Do not allow credentials
-  })
-);
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
 const hostname = "0.0.0.0";
 const PORT = process.env.PORT || 3001;
+
+app.use(
+  cors({
+    origin: FRONTEND_URL, // Allow the frontend's origin
+    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
+    allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+    credentials: true, // Allow credentials
+  })
+);
 
 // MongoDB Connection
 connectToMongoDB();
