@@ -36,7 +36,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // Middleware
 app.use(
   cors({
-    origin: '*', // Allow all origins
+    origin: "https://dapper-marzipan-3f7e6a.netlify.app/", // Allow production origins
     methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
     credentials: false, // Do not allow credentials
