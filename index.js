@@ -36,13 +36,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // Middleware
 app.use(
   cors({
-    // origin: '*',
-    origin: process.env.FRONTEND_URL,
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    origin: '*', // Allow all origins
+    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
+    allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+    credentials: false, // Do not allow credentials
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
