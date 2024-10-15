@@ -23,7 +23,7 @@ function connectToMongoDB() {
   const DATABASE_URI =
     process.env.NODE_ENV === "development"
       ? process.env.MONGODB_URI
-      : `mongodb+srv://${process.env.MONGODB_NAME}:${process.env.MONGODB_PASSWORD}@cluster0.3kvjo.mongodb.net/`;
+      : `mongodb+srv://${process.env.MONGODB_NAME}:${process.env.MONGODB_PASSWORD}@cluster0.3kvjo.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
   mongoose
     .connect(DATABASE_URI)
