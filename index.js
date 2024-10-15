@@ -231,6 +231,57 @@ app.get("/post/:id", async (req, res) => {
   }
 });
 
+app.put("/post/:id", uploadMiddleware.single("file"), async (req, res) => {
+  const { id } = req.params;
+
+  // Check if the file is uploaded
+  let newPath = null;
+  if (req.file) {
+    const { originalname, path } = req.file;
+    const parts = originalname.split(".");
+    const ext = parts[parts.length - 1];
+    newPath = path + "." + ext;
+    fs.renameSync(path, newPath);
+  }
+
+  // Verify the JWT token from cookies
+  const { token } = req.cookies;
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
+    if (err) {
+      return res.status(403).json({ message: "Invalid token" });
+    }
+
+    const { title, summary, content } = req.body;
+
+    try {
+      const updatedPost = await Post.findByIdAndUpdate(
+        id,
+        {
+          title,
+          summary,
+          content,
+          ...(newPath && { cover: newPath }), // Update cover if a new file is uploaded
+        },
+        { new: true } // Return the updated document
+      );
+
+      if (!updatedPost) {
+        return res.status(404).json({ message: "Post not found" });
+      }
+
+      res.json(updatedPost);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Failed to update post" });
+    }
+  });
+});
+
+
 // Start server
 app.listen(PORT, () =>
   console.log(`Server running at http://${hostname}:${PORT}`)
