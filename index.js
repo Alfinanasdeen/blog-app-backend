@@ -42,7 +42,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(
   cors({
-    origin: FRONTEND_URL, // Allow the frontend's origin
+    origin: "https://dapper-marzipan-3f7e6a.netlify.app", // Allow the frontend's origin
     methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
     credentials: true, // Allow credentials
