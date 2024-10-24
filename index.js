@@ -22,12 +22,7 @@ const envPath =
     ? ".env.production"
     : ".env.development";
 dotenv.config({ path: path.resolve(__dirname, envPath) });
-/* 
 
-app.use(bodyParser.json()); // for parsing application/json
-app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
-
-*/
 const app = express();
 const uploadMiddleware = multer({ dest: "uploads/" });
 const salt = bcrypt.genSaltSync(10);
@@ -42,7 +37,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(
   cors({
-    origin: "https://dapper-marzipan-3f7e6a.netlify.app", // Allow the frontend's origin
+    origin: process.env.FRONTEND_URL, // Allow the frontend's origin
     methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
     credentials: true, // Allow credentials
@@ -77,22 +72,16 @@ app.post("/login", async (req, res) => {
 
   const passOk = bcrypt.compareSync(password, userDoc.password);
   if (passOk) {
-    // logged in
+    // Generate JWT token
     jwt.sign({ username, id: userDoc._id }, JWT_SECRET, {}, (err, token) => {
       if (err) {
         console.error("JWT Sign Error:", err);
         return res.status(500).json({ message: "Token generation failed" });
       }
-      // Set cookie with appropriate attributes
-      res.cookie("token", token, {
-        httpOnly: true, // Prevents client-side JavaScript from accessing the cookie
-        secure: process.env.NODE_ENV === "production", // Set to true if using HTTPS
-        sameSite: "None", // Required for cross-origin cookies
-        path: "/", // Cookie is accessible on all routes
-      });
 
-      // Send response
+      // Send token to client
       return res.json({
+        token, // Client will store this token in LocalStorage
         id: userDoc._id,
         username,
       });
@@ -103,14 +92,14 @@ app.post("/login", async (req, res) => {
 });
 
 app.get("/profile", (req, res) => {
-  const { token } = req.cookies; // Get token from cookies
+  const token = req.headers.authorization?.split(" ")[1]; // Get token from Authorization header
   if (!token) {
-    return res.status(401).json({ message: "No token provided" }); // No token case
+    return res.status(401).json({ message: "No token provided" });
   }
 
   jwt.verify(token, JWT_SECRET, {}, (err, info) => {
     if (err) {
-      return res.status(403).json({ message: "Invalid token" }); // Token is invalid
+      return res.status(403).json({ message: "Invalid token" });
     }
     res.json(info); // Return user info if valid
   });
@@ -119,84 +108,53 @@ app.get("/profile", (req, res) => {
 app.post("/logout", (req, res) => {
   res.cookie("token", "").json("ok");
 });
-app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
-  const { originalname, path } = req.file;
+//-----------------------------------------------------------------------------------------------------------------
 
-  // Ensure the uploaded file exists
-  if (!req.file) {
-    return res.status(400).json({ message: "File is required" });
-  }
-
-  const parts = originalname.split(".");
-  const ext = parts[parts.length - 1];
-  const newPath = path + "." + ext;
-
-  // Rename the uploaded file to include its original extension
-  fs.renameSync(path, newPath);
-
-  // Verify the JWT token from cookies
-  const { token } = req.cookies;
-  if (!token) {
-    return res.status(401).json({ message: "No token provided" });
-  }
-
-  jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
-    if (err) {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-
-    // Destructure title, summary, and content from the request body
-    const { title, summary, content } = req.body;
-
-    try {
-      const postDoc = await Post.create({
-        title,
-        summary,
-        content,
-        cover: newPath,
-        author: info.id,
-      });
-      res.json(postDoc);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: "Failed to create post" });
-    }
-  });
-});
-
+// Create Post Route
 app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
   try {
     // Check if file is uploaded
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(400).json({ message: "File is required" });
     }
 
-    const { originalname, path } = req.file;
+    const { originalname, path: tempPath } = req.file;
     const parts = originalname.split(".");
     const ext = parts[parts.length - 1];
-    const newPath = path + "." + ext;
-    fs.renameSync(path, newPath);
+    const newPath = `${tempPath}.${ext}`;
 
-    const { token } = req.cookies;
+    // Rename the temporary file to include its original extension
+    fs.renameSync(tempPath, newPath);
+
+    // Get the token from the Authorization header
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
 
     // Verify the token
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
     jwt.verify(token, JWT_SECRET, {}, async (err, info) => {
       if (err) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(403).json({ message: "Invalid token" });
       }
 
       const { title, summary, content } = req.body;
-      const postDoc = await Post.create({
-        title,
-        summary,
-        content,
-        cover: newPath,
-        author: info.id,
-      });
 
-      // Set the token in a cookie after creating the post
-      res.cookie("token", token, { httpOnly: true }); // Set cookie options as needed
-      res.status(201).json(postDoc);
+      try {
+        const postDoc = await Post.create({
+          title,
+          summary,
+          content,
+          cover: newPath, // Use newPath here
+          author: info.id,
+        });
+        res.status(201).json(postDoc);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to create post" });
+      }
     });
   } catch (error) {
     console.error(error);
@@ -204,6 +162,7 @@ app.post("/post", uploadMiddleware.single("file"), async (req, res) => {
   }
 });
 
+// Get all Posts Route
 app.get("/post", async (req, res) => {
   try {
     const posts = await Post.find()
@@ -217,6 +176,7 @@ app.get("/post", async (req, res) => {
   }
 });
 
+// Get a Single Post Route
 app.get("/post/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -231,6 +191,7 @@ app.get("/post/:id", async (req, res) => {
   }
 });
 
+// Update Post Route
 app.put("/post/:id", uploadMiddleware.single("file"), async (req, res) => {
   const { id } = req.params;
 
@@ -244,8 +205,10 @@ app.put("/post/:id", uploadMiddleware.single("file"), async (req, res) => {
     fs.renameSync(path, newPath);
   }
 
-  // Verify the JWT token from cookies
-  const { token } = req.cookies;
+  // Get the token from the Authorization header
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
   if (!token) {
     return res.status(401).json({ message: "No token provided" });
   }
